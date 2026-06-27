@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rubik's Cube AI Solver | BFS, DFS, IDDFS</title>
+    <meta name="description" content="An interactive 3D Rubik's Cube solver utilizing classic AI search algorithms: BFS, DFS, and IDDFS.">
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Three.js via CDN (non-module UMD build) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls (attaches to THREE.OrbitControls in UMD mode) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <!-- Core logic -->
+    <script src="cube.js"></script>
+    <script src="renderer.js"></script>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <h1>RUBIK'S CUBE AI</h1>
+            <span>SOLVER</span>
+        </div>
+        <div class="hud-pill">
+            <span>Size:</span>
+            <span id="header-size-indicator">3x3x3</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- ===== SIDEBAR ===== -->
+        <div class="sidebar glass-panel">
+
+            <!-- Cube Configuration -->
+            <div class="control-group">
+                <h2 class="section-title">Configuration</h2>
+                <label>Cube Size</label>
+                <div class="radio-group">
+                    <div class="radio-btn">
+                        <input type="radio" id="size-2" name="cube-size" value="2">
+                        <label for="size-2">2×2 Pocket</label>
+                    </div>
+                    <div class="radio-btn">
+                        <input type="radio" id="size-3" name="cube-size" value="3" checked>
+                        <label for="size-3">3×3 Rubik's</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scramble Control -->
+            <div class="control-group">
+                <label>Scramble Options</label>
+                <div class="slider-container">
+                    <div class="slider-val-container">
+                        <span>Scramble Depth</span>
+                        <span id="scramble-depth-val" class="slider-val">3</span>
+                    </div>
+                    <input type="range" id="scramble-depth" min="1" max="12" value="3">
+                </div>
+                <button id="btn-scramble" class="btn btn-secondary">🔀 Scramble Cube</button>
+            </div>
+
+            <!-- Search Algorithms -->
+            <div class="control-group">
+                <h2 class="section-title">Search Algorithm</h2>
+                <div class="algo-btn-group">
+
+                    <!-- IDDFS (default — most reliable) -->
+                    <label class="algo-card" data-algo="iddfs" for="algo-iddfs">
+                        <input type="radio" id="algo-iddfs" name="algorithm" value="iddfs" checked>
+                        <div class="algo-card-title">
+                            <span>Iterative Deepening (IDDFS)</span>
+                        </div>
+                        <div class="algo-card-desc">
+                            Runs DFS at increasing depth limits. Guarantees shortest path with linear memory.
+                            <strong>Recommended.</strong>
+                        </div>
+                    </label>
+
+                    <!-- BFS -->
+                    <label class="algo-card" data-algo="bfs" for="algo-bfs">
+                        <input type="radio" id="algo-bfs" name="algorithm" value="bfs">
+                        <div class="algo-card-title">
+                            <span>Breadth-First Search (BFS)</span>
+                        </div>
+                        <div class="algo-card-desc">
+                            Explores level by level. Always finds shortest path but uses exponential memory.
+                            Best for depth ≤ 5.
+                        </div>
+                    </label>
+
+                    <!-- DFS -->
+                    <label class="algo-card" data-algo="dfs" for="algo-dfs">
+                        <input type="radio" id="algo-dfs" name="algorithm" value="dfs">
+                        <div class="algo-card-title">
+                            <span>Depth-First Search (DFS)</span>
+                        </div>
+                        <div class="algo-card-desc">
+                            Explores one branch fully to a fixed depth limit. Fast, low memory, but does not guarantee the shortest path.
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- DFS Limit Slider -->
+            <div class="control-group" id="dfs-depth-container" style="display: none;">
+                <label>DFS Depth Limit</label>
+                <div class="slider-container">
+                    <div class="slider-val-container">
+                        <span>Max Depth</span>
+                        <span id="dfs-depth-val" class="slider-val">6</span>
+                    </div>
+                    <input type="range" id="dfs-depth" min="1" max="12" value="6">
+                </div>
+            </div>
+
+            <!-- Warning Box -->
+            <div id="warning-box" class="warning-box" style="display: none;"></div>
+
+            <!-- Action Buttons -->
+            <button id="btn-solve" class="btn btn-primary">🧠 SOLVE CUBE</button>
+            <button id="btn-reset" class="btn btn-secondary">↩ Reset to Solved</button>
+
+            <!-- Keyboard Help -->
+            <div class="info-section">
+                <h3>Manual Keyboard Turns</h3>
+                <p>Press key for CW. Hold <kbd>Shift</kbd> for CCW (prime).</p>
+                <div class="key-list">
+                    <div class="key-item"><kbd>U</kbd> <span>Up face</span></div>
+                    <div class="key-item"><kbd>D</kbd> <span>Down face</span></div>
+                    <div class="key-item"><kbd>L</kbd> <span>Left face</span></div>
+                    <div class="key-item"><kbd>R</kbd> <span>Right face</span></div>
+                    <div class="key-item"><kbd>F</kbd> <span>Front face</span></div>
+                    <div class="key-item"><kbd>B</kbd> <span>Back face</span></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ===== VISUALIZER ===== -->
+        <div class="visualizer-panel">
+
+            <div class="scene-container">
+                <div id="canvas3d"></div>
+
+                <!-- HUD pill -->
+                <div class="hud-overlay">
+                    <div class="hud-pill">
+                        <span>State:</span>
+                        <span id="cube-state-hud" class="status-success">Solved</span>
+                    </div>
+                </div>
+
+                <!-- Live Solver Metrics -->
+                <div id="metrics-panel" class="metrics-overlay" style="display: none;">
+                    <div class="metrics-title">Solver Statistics</div>
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        <span id="metric-status" class="metric-value status-searching">Searching…</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Nodes Visited</span>
+                        <span id="metric-nodes" class="metric-value">0</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Time Elapsed</span>
+                        <span id="metric-time" class="metric-value">0ms</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Search Speed</span>
+                        <span id="metric-speed" class="metric-value">—</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Solution Length</span>
+                        <span id="metric-length" class="metric-value">—</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Playback Panel -->
+            <div class="playback-panel">
+                <div class="playback-controls">
+                    <button id="play-prev" class="round-btn" title="Previous Move" disabled>
+                        <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                    </button>
+                    <button id="play-toggle" class="round-btn" title="Play/Pause" disabled>
+                        <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        <svg id="pause-icon" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    </button>
+                    <button id="play-next" class="round-btn" title="Next Move" disabled>
+                        <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                    </button>
+                </div>
+
+                <div id="solution-steps" class="solution-steps">
+                    <span style="color: var(--text-secondary);">No solution loaded</span>
+                </div>
+
+                <div class="slider-container" style="width: 150px; flex-shrink: 0;">
+                    <div class="slider-val-container">
+                        <span>Speed</span>
+                        <span id="play-speed-val">500ms</span>
+                    </div>
+                    <input type="range" id="play-speed" min="100" max="1500" value="500" step="50">
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+    // ===========================
+    //  Application State
+    // ===========================
+    let cube = null;
+    let renderer = null;
+    let solutionMoves = [];
+    let preSolveState = null;    // cube state at the moment "Solve" was clicked
+    let snapshotStates = [];     // state snapshot after each solution step (for fast jump-to-step)
+    let currentStep = -1;        // which step of the solution we're at (-1 = before step 0)
+    let isPlaying = false;
+    let playbackTimeout = null;
+    let solverWorker = null;
+
+    // ===========================
+    //  DOM References
+    // ===========================
+    const size2Radio   = document.getElementById('size-2');
+    const size3Radio   = document.getElementById('size-3');
+    const headerSize   = document.getElementById('header-size-indicator');
+
+    const scrambleDepthSlider = document.getElementById('scramble-depth');
+    const scrambleDepthVal    = document.getElementById('scramble-depth-val');
+    const btnScramble         = document.getElementById('btn-scramble');
+    const btnSolve            = document.getElementById('btn-solve');
+    const btnReset            = document.getElementById('btn-reset');
+
+    const algoBfs    = document.getElementById('algo-bfs');
+    const algoDfs    = document.getElementById('algo-dfs');
+    const algoIddfs  = document.getElementById('algo-iddfs');
+    const dfsDepthContainer = document.getElementById('dfs-depth-container');
+    const dfsDepthSlider    = document.getElementById('dfs-depth');
+    const dfsDepthVal       = document.getElementById('dfs-depth-val');
+    const warningBox        = document.getElementById('warning-box');
+    const stateHud          = document.getElementById('cube-state-hud');
+
+    const metricsPanel  = document.getElementById('metrics-panel');
+    const metricStatus  = document.getElementById('metric-status');
+    const metricNodes   = document.getElementById('metric-nodes');
+    const metricTime    = document.getElementById('metric-time');
+    const metricSpeed   = document.getElementById('metric-speed');
+    const metricLength  = document.getElementById('metric-length');
+
+    const playPrevBtn           = document.getElementById('play-prev');
+    const playToggleBtn         = document.getElementById('play-toggle');
+    const playNextBtn           = document.getElementById('play-next');
+    const playIcon              = document.getElementById('play-icon');
+    const playPauseIcon         = document.getElementById('pause-icon');
+    const solutionStepsContainer = document.getElementById('solution-steps');
+    const playSpeedSlider       = document.getElementById('play-speed');
+    const playSpeedVal          = document.getElementById('play-speed-val');
+
+    // ===========================
+    //  Init / Reset
+    // ===========================
+    function initApp() {
+        const size = size2Radio.checked ? 2 : 3;
+        headerSize.textContent = size === 2 ? '2×2×2' : '3×3×3';
+
+        cube = new RubiksCube(size);
+
+        if (renderer) {
+            // Rebuild the 3D scene for new cube size
+            renderer.rebuild(size);
+        } else {
+            renderer = new CubeRenderer('canvas3d', size);
+        }
+        renderer.updateState(cube.state);
+
+        clearSolution();
+        updateWarning();
+        updateHudState();
+    }
+
+    function clearSolution() {
+        stopPlayback();
+        solutionMoves  = [];
+        snapshotStates = [];
+        preSolveState  = null;
+        currentStep    = -1;
+        updatePlaybackButtons();
+        solutionStepsContainer.innerHTML =
+            '<span style="color: var(--text-secondary);">No solution loaded</span>';
+        metricsPanel.style.display = 'none';
+    }
+
+    function updateHudState() {
+        const solved = cube.isSolved(cube.state);
+        stateHud.textContent = solved ? 'Solved' : 'Scrambled';
+        stateHud.className   = solved ? 'status-success' : 'status-error';
+    }
+
+    // ===========================
+    //  Cube-size toggle
+    // ===========================
+    size2Radio.addEventListener('change', initApp);
+    size3Radio.addEventListener('change', initApp);
+
+    // ===========================
+    //  Slider feedback
+    // ===========================
+    scrambleDepthSlider.addEventListener('input', e => {
+        scrambleDepthVal.textContent = e.target.value;
+        updateWarning();
+    });
+    dfsDepthSlider.addEventListener('input', e => {
+        dfsDepthVal.textContent = e.target.value;
+    });
+    playSpeedSlider.addEventListener('input', e => {
+        playSpeedVal.textContent = e.target.value + 'ms';
+    });
+
+    // Show/hide DFS depth slider
+    [algoBfs, algoDfs, algoIddfs].forEach(r =>
+        r.addEventListener('change', () => {
+            dfsDepthContainer.style.display = algoDfs.checked ? 'flex' : 'none';
+            updateWarning();
+        })
+    );
+
+    function updateWarning() {
+        const size  = size2Radio.checked ? 2 : 3;
+        const depth = parseInt(scrambleDepthSlider.value);
+
+        if (algoBfs.checked && size === 3 && depth > 5) {
+            warningBox.style.display = 'block';
+            warningBox.innerHTML =
+                `<strong>⚠ Caution:</strong> BFS on 3×3 with depth ${depth} will explore millions of states
+                 and may time out. Reduce depth to ≤ 5 or switch to <strong>IDDFS</strong>.`;
+        } else if (algoBfs.checked && size === 2 && depth > 8) {
+            warningBox.style.display = 'block';
+            warningBox.innerHTML =
+                `<strong>⚠ Caution:</strong> BFS on 2×2 with depth ${depth} may time out. Try ≤ 8.`;
+        } else if (algoDfs.checked && depth > parseInt(dfsDepthSlider.value)) {
+            warningBox.style.display = 'block';
+            warningBox.innerHTML =
+                `<strong>ℹ Note:</strong> DFS depth limit (${dfsDepthSlider.value}) is lower than
+                 the scramble depth (${depth}). DFS may not find a solution — increase the depth limit.`;
+        } else {
+            warningBox.style.display = 'none';
+        }
+    }
+
+    // ===========================
+    //  Scramble
+    // ===========================
+    btnScramble.addEventListener('click', async () => {
+        if (!cube || !renderer || renderer.isAnimating || isPlaying) return;
+
+        clearSolution();
+
+        const depth = parseInt(scrambleDepthSlider.value);
+        const size  = size2Radio.checked ? 2 : 3;
+        const movesList = size === 2
+            ? ['U', "U'", 'U2', 'R', "R'", 'R2', 'F', "F'", 'F2']
+            : cube.getMoves();
+
+        // Build scramble sequence (no consecutive same-face moves)
+        const scrambleSeq = [];
+        let lastFace = '';
+        for (let i = 0; i < depth; i++) {
+            const valid = movesList.filter(m => m[0] !== lastFace);
+            const m = valid[Math.floor(Math.random() * valid.length)];
+            scrambleSeq.push(m);
+            lastFace = m[0];
+        }
+
+        console.log('Scramble:', scrambleSeq.join(' '));
+        setUIInteractive(false);
+
+        for (const move of scrambleSeq) {
+            const oldState  = cube.state;
+            const nextState = cube.applyMove(oldState, move);
+            cube.state = nextState;
+            await renderer.animateMove(move, oldState, nextState, 120);
+        }
+
+        setUIInteractive(true);
+        updateHudState();
+        solutionStepsContainer.innerHTML =
+            `<span style="color:var(--text-secondary)">Scrambled with ${depth} moves — click Solve!</span>`;
+    });
+
+    // ===========================
+    //  Reset
+    // ===========================
+    btnReset.addEventListener('click', () => {
+        if (renderer && renderer.isAnimating) return;
+        if (solverWorker) { solverWorker.terminate(); solverWorker = null; }
+        initApp();
+    });
+
+    // ===========================
+    //  Solve
+    // ===========================
+    btnSolve.addEventListener('click', () => {
+        if (!cube || !renderer || renderer.isAnimating || isPlaying) return;
+
+        if (cube.isSolved(cube.state)) {
+            solutionStepsContainer.innerHTML =
+                '<span style="color:var(--color-success)">✔ Cube is already solved!</span>';
+            return;
+        }
+
+        stopPlayback();
+        setUIInteractive(false);
+        clearSolution();
+
+        // Save the scrambled state so playback always starts from here
+        preSolveState = [...cube.state];
+
+        metricsPanel.style.display = 'flex';
+        metricStatus.textContent   = 'Searching…';
+        metricStatus.className     = 'metric-value status-searching';
+        metricNodes.textContent    = '0';
+        metricTime.textContent     = '0ms';
+        metricSpeed.textContent    = '—';
+        metricLength.textContent   = '—';
+        solutionStepsContainer.innerHTML =
+            '<span style="color:var(--color-bfs);animation:pulse 1s infinite">Solver running…</span>';
+
+        if (solverWorker) solverWorker.terminate();
+        solverWorker = new Worker('solver.js');
+
+        const algo       = algoBfs.checked ? 'bfs' : algoDfs.checked ? 'dfs' : 'iddfs';
+        const depthLimit = parseInt(dfsDepthSlider.value);
+        const size       = size2Radio.checked ? 2 : 3;
+
+        solverWorker.postMessage({ state: cube.state, algorithm: algo, size, maxDepth: depthLimit });
+
+        solverWorker.onmessage = e => {
+            const { status, nodesVisited, elapsedTime, solution } = e.data;
+
+            // Update live metrics
+            metricNodes.textContent = nodesVisited.toLocaleString();
+            metricTime.textContent  = elapsedTime + 'ms';
+            const speed = elapsedTime > 0
+                ? Math.round(nodesVisited / elapsedTime * 1000).toLocaleString() + ' n/s'
+                : '—';
+            metricSpeed.textContent = speed;
+
+            if (status === 'searching') return; // progress ping only
+
+            solverWorker.terminate();
+            solverWorker = null;
+            setUIInteractive(true);
+
+            if (status === 'success') {
+                metricStatus.textContent = 'Solved ✔';
+                metricStatus.className   = 'metric-value status-success';
+                metricLength.textContent = solution.length + ' moves';
+
+                solutionMoves = solution;
+                currentStep   = -1;
+
+                // Pre-compute state snapshots for instant jump-to-step
+                snapshotStates = [preSolveState];
+                let st = [...preSolveState];
+                for (const mv of solutionMoves) {
+                    st = cube.applyMove(st, mv);
+                    snapshotStates.push([...st]);
+                }
+
+                renderSolutionMoves();
+                updatePlaybackButtons();
+
+                if (solution.length > 0) {
+                    startPlayback();
+                } else {
+                    solutionStepsContainer.innerHTML =
+                        '<span style="color:var(--color-success)">✔ Already solved (0 moves)</span>';
+                }
+            } else {
+                let msg = 'Search failed.';
+                if (status === 'timeout')        msg = '⏱ Search timed out (20s limit). Reduce scramble depth.';
+                if (status === 'limit_exceeded') msg = '🚫 Node limit reached. Use IDDFS or reduce depth.';
+                if (status === 'failed')         msg = '❌ No solution found within depth limit (try increasing DFS limit).';
+
+                metricStatus.textContent = status === 'timeout' ? 'Timeout' : 'Failed';
+                metricStatus.className   = 'metric-value status-error';
+                solutionStepsContainer.innerHTML = `<span style="color:var(--color-error)">${msg}</span>`;
+            }
+        };
+
+        solverWorker.onerror = err => {
+            solverWorker.terminate(); solverWorker = null;
+            setUIInteractive(true);
+            solutionStepsContainer.innerHTML =
+                `<span style="color:var(--color-error)">Worker error: ${err.message}</span>`;
+        };
+    });
+
+    // ===========================
+    //  Solution Step Display
+    // ===========================
+    function renderSolutionMoves() {
+        if (solutionMoves.length === 0) {
+            solutionStepsContainer.innerHTML =
+                '<span style="color:var(--color-success)">✔ Solved in 0 moves</span>';
+            return;
+        }
+        solutionStepsContainer.innerHTML = '';
+        solutionMoves.forEach((mv, idx) => {
+            const span = document.createElement('span');
+            span.className = 'solution-move';
+            span.id = `move-step-${idx}`;
+            span.textContent = mv;
+            span.addEventListener('click', () => jumpToStep(idx));
+            solutionStepsContainer.appendChild(span);
+        });
+    }
+
+    function highlightStep(idx) {
+        document.querySelectorAll('.solution-move').forEach(el => el.classList.remove('active'));
+        if (idx >= 0 && idx < solutionMoves.length) {
+            const el = document.getElementById(`move-step-${idx}`);
+            if (el) {
+                el.classList.add('active');
+                el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            }
+        }
+    }
+
+    // ===========================
+    //  Jump-to-step (uses snapshots)
+    // ===========================
+    async function jumpToStep(targetStep) {
+        if (!preSolveState || renderer.isAnimating) return;
+        stopPlayback();
+
+        // snapshotStates[0] = preSolveState, snapshotStates[k] = state after k moves
+        const targetState = snapshotStates[targetStep + 1]; // +1 because index 0 = pre-solve
+        if (!targetState) return;
+
+        cube.state = [...targetState];
+        renderer.updateState(cube.state);
+        currentStep = targetStep;
+        highlightStep(currentStep);
+        updateHudState();
+        updatePlaybackButtons();
+    }
+
+    // ===========================
+    //  Playback Controls
+    // ===========================
+    async function playStep(forward = true) {
+        if (!renderer || renderer.isAnimating || !preSolveState) return;
+
+        if (forward) {
+            if (currentStep >= solutionMoves.length - 1) { stopPlayback(); return; }
+            currentStep++;
+            const move     = solutionMoves[currentStep];
+            const oldState = cube.state;
+            const newState = snapshotStates[currentStep + 1];
+            cube.state = [...newState];
+            highlightStep(currentStep);
+            const dur = parseInt(playSpeedSlider.value);
+            await renderer.animateMove(move, oldState, newState, dur * 0.7);
+        } else {
+            if (currentStep < 0) return;
+            const move     = solutionMoves[currentStep];
+            const oldState = cube.state;
+            // reverse of the move
+            const revMove  = move.includes('2') ? move
+                           : move.includes("'") ? move[0]
+                           : move + "'";
+            currentStep--;
+            const newState = currentStep >= 0 ? snapshotStates[currentStep + 1] : preSolveState;
+            cube.state = [...newState];
+            highlightStep(currentStep);
+            const dur = parseInt(playSpeedSlider.value);
+            await renderer.animateMove(revMove, oldState, newState, dur * 0.7);
+        }
+
+        updateHudState();
+        updatePlaybackButtons();
+    }
+
+    function updatePlaybackButtons() {
+        const hasSolution = solutionMoves.length > 0;
+        playPrevBtn.disabled   = !hasSolution || currentStep < 0;
+        playNextBtn.disabled   = !hasSolution || currentStep >= solutionMoves.length - 1;
+        playToggleBtn.disabled = !hasSolution;
+    }
+
+    function startPlayback() {
+        if (isPlaying) return;
+        isPlaying = true;
+        playIcon.style.display     = 'none';
+        playPauseIcon.style.display = 'block';
+        runLoop();
+    }
+
+    function stopPlayback() {
+        if (!isPlaying) return;
+        isPlaying = false;
+        playIcon.style.display     = 'block';
+        playPauseIcon.style.display = 'none';
+        if (playbackTimeout) { clearTimeout(playbackTimeout); playbackTimeout = null; }
+    }
+
+    async function runLoop() {
+        if (!isPlaying) return;
+        if (currentStep >= solutionMoves.length - 1) { stopPlayback(); return; }
+        await playStep(true);
+        const delay = parseInt(playSpeedSlider.value);
+        playbackTimeout = setTimeout(runLoop, delay);
+    }
+
+    playToggleBtn.addEventListener('click', () => {
+        if (isPlaying) stopPlayback(); else startPlayback();
+    });
+    playNextBtn.addEventListener('click', () => { stopPlayback(); playStep(true);  });
+    playPrevBtn.addEventListener('click', () => { stopPlayback(); playStep(false); });
+
+    // ===========================
+    //  Keyboard Turns
+    // ===========================
+    window.addEventListener('keydown', async e => {
+        if (document.activeElement.tagName === 'INPUT') return;
+        if (!cube || !renderer || renderer.isAnimating) return;
+
+        const validKeys = ['U','D','L','R','F','B'];
+        const key = e.key.toUpperCase();
+        if (!validKeys.includes(key)) return;
+
+        e.preventDefault();
+        stopPlayback();
+        clearSolution();
+        solutionStepsContainer.innerHTML =
+            '<span style="color:var(--text-secondary)">Manual turn applied</span>';
+
+        const move = key + (e.shiftKey ? "'" : '');
+        const oldState  = cube.state;
+        const nextState = cube.applyMove(oldState, move);
+        cube.state = nextState;
+
+        setUIInteractive(false);
+        await renderer.animateMove(move, oldState, nextState, 250);
+        setUIInteractive(true);
+        updateHudState();
+    });
+
+    // ===========================
+    //  UI Helpers
+    // ===========================
+    function setUIInteractive(active) {
+        [btnScramble, btnSolve, btnReset,
+         size2Radio, size3Radio,
+         algoBfs, algoDfs, algoIddfs].forEach(el => el.disabled = !active);
+    }
+
+    // ===========================
+    //  Boot
+    // ===========================
+    window.addEventListener('load', initApp);
+    </script>
+</body>
+</html>
