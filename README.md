@@ -55,15 +55,4 @@ rubiks-cube-solver/
 └── server.js        <- Mini Node.js server (optional, for local hosting)
 ```
 
----
 
-## 💡 SDE Interview Q&A
-
-### Q1: Why did you run the solving algorithms in a Web Worker?
-> JavaScript is single-threaded. Because pathfinding on a Rubik's Cube can visit millions of nodes and take up to 20 seconds, running it on the main UI thread would block the browser's event loop. This would cause the entire page to freeze, stop animations, and trigger a "Page Unresponsive" popup. By offloading the search to a `Web Worker`, the computations run in a separate background thread, allowing the main thread to render smooth animations and show a live search progress count (elapsed time, nodes visited) back to the user.
-
-### Q2: Why is IDDFS preferred over BFS for deeper solution searches?
-> BFS stores every visited state in a queue to traverse level-by-level, which results in an exponential space complexity of \(O(B^D)\). For a branching factor \(B \approx 12\) (after basic pruning), searching to depth 7 would require storing millions of states in memory, quickly crashing the browser tab's heap. IDDFS combines the depth-first search space efficiency of \(O(D)\) with the shortest-path guarantee of BFS by running depth-limited DFS repeatedly, incrementing the limit by 1 each time. It uses virtually no memory.
-
-### Q3: How does your CSS-only 3D rendering engine work?
-> Instead of bringing in three.js or canvas-based WebGL, I utilized CSS 3D capabilities. The cube is represented as a container with `transform-style: preserve-3d`. Each of the 26 cubies is a `div` positioned in 3D space using `translate3d`. The faces of each cubie are rotated using `rotateX`, `rotateY`, and `rotateZ`. To rotate a slice, the code groups the active cubies into a temporary rotation element, applies a CSS transition for the rotation angle, updates the underlying state array, and reconstructs the flat layout.
